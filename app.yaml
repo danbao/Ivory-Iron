@@ -1,0 +1,13 @@
+application: ivory-iron
+version: 1
+runtime: go
+api_version: go1
+
+handlers:
+
+- url: /_IIadmin/static
+  static_dir: static
+
+- url: /.*
+  script: _go_app
+
