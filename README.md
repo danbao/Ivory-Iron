@@ -1,6 +1,9 @@
 # Ivory-Iron
 Ivory-Iron is a lightweigth, easy to setup reverse proxy for Google App Engine written in Golang.
 
+### Features
+* Caching of pages (Memcache + Datastore)
+
 ### Setup
 * Register a Google App Engine account (https://appengine.google.com/)
 * Change the Application name in app.yaml
