@@ -36,33 +36,37 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var body string
 	var ContentType string
 
+// Allowed methods
+	if(r.Method != "POST" && r.Method != "GET" ) {
+			fmt.Fprintf(w, "%s", "Not allowed")
+return
+	}
+
 	// get the Page
-	body, ContentType = checkCache(w, r)
+	body, ContentType = getData(w, r)
 
 	w.Header().Set("Content-Type", ContentType)
 	fmt.Fprintf(w, "%s", body)
 }
 
-// Check if item in cache
-func checkCache(w http.ResponseWriter, r *http.Request) (string, string) {
+// Get the data
+func getData(w http.ResponseWriter, r *http.Request) (string, string) {
 	c := appengine.NewContext(r)
-	// Lets have a look in 
-	if /*item*/ item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
-		// in memcache
-		//	return true, item
+	// Lets first have a look in the memcache, maybe it's cached
+	if item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
 		item_Contenttype, _ := memcache.Get(c, "II_file"+r.URL.Path+"ContentType") // todo error checking
 		return string(item.Value), string(item_Contenttype.Value)
 	}
-	// Let's have a look in the datastore
+	// No? - Maybe it's in the datastore?
 	key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
 	var Cache Cache
 	if err := datastore.Get(c, key, &Cache); err == nil {
-		// In datastorecache
 		// TODO: add to memcache
+		// In the memcache, now put it also to the cache
 		return string(Cache.Body), Cache.ContentType
 	}
 
-	// Not in cache, get the page new
+	// Not cached, we need to get the page from the server.
 	return getPage(w, r)
 }
 
@@ -70,7 +74,7 @@ func checkCache(w http.ResponseWriter, r *http.Request) (string, string) {
 func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
 	c := appengine.NewContext(r)
 	client := urlfetch.Client(c)
-	resp, err := client.Get("http://owncloud.org/" + r.URL.Path)
+	resp, err := client.Get("http://bugs.owncloud.org/" + r.URL.Path)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -81,7 +85,7 @@ func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	// Do the replacement
-	replaceStrings := strings.NewReplacer("owncloud.org", r.Host)
+	replaceStrings := strings.NewReplacer("bugs.owncloud.org", r.Host)
 	strBody := replaceStrings.Replace(string(body))
 
 	// Save in DB
