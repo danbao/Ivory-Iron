@@ -124,7 +124,7 @@ func CheckForCSRFToken(r *http.Request) bool {
 func GenerateCSRFToken(r *http.Request) {
 	c := appengine.NewContext(r)
 	u := user.Current(c)
-	csrfToken := MakeRandomString(20)
+	csrfToken := MakeRandomString(256)
 
 	/* 
 	 * Insert the CSRF into the Memcache

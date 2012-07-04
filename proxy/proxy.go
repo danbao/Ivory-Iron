@@ -21,7 +21,8 @@ type Settings struct {
 
 /* Cache */
 type Cache struct {
-	Body string
+	Body        string
+	ContentType string
 }
 
 func init() {
@@ -45,18 +46,21 @@ func handler(w http.ResponseWriter, r *http.Request) {
 // Check if item in cache
 func checkCache(w http.ResponseWriter, r *http.Request) (string, string) {
 	c := appengine.NewContext(r)
-	if /*item*/ _, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
+	// Lets have a look in 
+	if /*item*/ item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
 		// in memcache
 		//	return true, item
-		return "", ""
+		return string(item.Value), ""
 	}
-	// No token, let's have a look in the datastore
+	// Let's have a look in the datastore
 	key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
 	var Cache Cache
 	if err := datastore.Get(c, key, &Cache); err == nil {
 		// In datastorecache
-		return string(Cache.Body), ""
+		// TODO: add to memcache
+		return string(Cache.Body), Cache.ContentType
 	}
+
 	// Not in cache, get the page new
 	return getPage(w, r)
 }
@@ -81,13 +85,39 @@ func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
 
 	// Save in DB
 	Cache := Cache{
-		Body: strBody,
+		Body:        strBody,
+		ContentType: resp.Header.Get("Content-Type"),
 	}
 	_, err = datastore.Put(c, datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil), &Cache)
 	if err != nil {
-		// Error!
+		// Todo: Error!
+		//return "", ""
 	}
 	// Save in memcache
+	// TODO: Check if data > 1MB
+	// Create an Item
+	item := &memcache.Item{
+		Key:   "II_file" + r.URL.Path,
+		Value: []byte(strBody),
+	}
+	item_Contenttype := &memcache.Item{
+		Key:   "II_file" + r.URL.Path + "ContentType",
+		Value: []byte(resp.Header.Get("Content-Type")),
+	}
+	// Add the item to the memcache, if the key does not already exist
+	if err := memcache.Add(c, item); err == memcache.ErrNotStored {
+		//c.Log("item with key %q already exists", item.Key)
+
+	} else if err != nil {
+		//c.Log("error adding item: %v", err)
+	}
+	// Add the item to the memcache, if the key does not already exist
+	if err := memcache.Add(c, item_Contenttype); err == memcache.ErrNotStored {
+		//c.Log("item with key %q already exists", item.Key)
+
+	} else if err != nil {
+		//c.Log("error adding item: %v", err)
+	}
 	return strBody, string(resp.Header.Get("Content-Type"))
 }
 
