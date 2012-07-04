@@ -50,7 +50,8 @@ func checkCache(w http.ResponseWriter, r *http.Request) (string, string) {
 	if /*item*/ item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
 		// in memcache
 		//	return true, item
-		return string(item.Value), ""
+		item_Contenttype, _ := memcache.Get(c, "II_file"+r.URL.Path+"ContentType") // todo error checking
+		return string(item.Value), string(item_Contenttype.Value)
 	}
 	// Let's have a look in the datastore
 	key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
