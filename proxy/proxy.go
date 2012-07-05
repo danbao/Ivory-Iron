@@ -21,7 +21,7 @@ type Settings struct {
 
 /* Cache */
 type Cache struct {
-	Body        string
+	Body        []byte
 	ContentType string
 }
 
@@ -74,7 +74,7 @@ func getData(w http.ResponseWriter, r *http.Request) (string, string) {
 func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
 	c := appengine.NewContext(r)
 	client := urlfetch.Client(c)
-	resp, err := client.Get("http://bugs.owncloud.org/" + r.URL.Path)
+	resp, err := client.Get("http://owncloud.org/" + r.URL.Path)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -85,12 +85,12 @@ func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	// Do the replacement
-	replaceStrings := strings.NewReplacer("bugs.owncloud.org", r.Host)
+	replaceStrings := strings.NewReplacer("owncloud.org", r.Host)
 	strBody := replaceStrings.Replace(string(body))
 
 	// Save in DB
 	Cache := Cache{
-		Body:        strBody,
+		Body:        []byte(strBody),
 		ContentType: resp.Header.Get("Content-Type"),
 	}
 	_, err = datastore.Put(c, datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil), &Cache)
