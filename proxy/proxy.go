@@ -3,7 +3,7 @@
  * and/or modify it under the terms of the Do What The Fuck You Want
  * To Public License, Version 2, as published by Sam Hocevar. See
  * http://sam.zoy.org/wtfpl/COPYING for more details. */
- 
+
 package proxy
 
 import (
@@ -65,22 +65,28 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ContentType)
 	w.Header().Set("Cache-Control", CacheControl)
 	fmt.Fprintf(w, "%s", body) */
-	c := appengine.NewContext(r)
-	client := urlfetch.Client(c)
-	resp, err := client.Get("http://heise.de/" + r.URL.Path)
+	
+	if r.Header.Get("If-Modified-Since") == "" {
+		c := appengine.NewContext(r)
+		client := urlfetch.Client(c)
+		resp, err := client.Get("http://heise.de/" + r.URL.Path)
 
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		//return 
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			//return 
+		}
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		// Do the replacement
+		replaceStrings := strings.NewReplacer("heise.de", r.Host)
+		strBody := replaceStrings.Replace(string(body))
+
+		copyHeader(w.Header(), resp.Header)
+		fmt.Fprintf(w, "%s", strBody)
+	} else {
+		w.WriteHeader(http.StatusNotModified)
+		fmt.Fprintf(w, "")
 	}
-	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
-	// Do the replacement
-	replaceStrings := strings.NewReplacer("heise.de", r.Host)
-	strBody := replaceStrings.Replace(string(body))
-
-	copyHeader(w.Header(), resp.Header)
-	fmt.Fprintf(w, "%s", strBody)
 }
 
 // Copy the HTTP Headers
