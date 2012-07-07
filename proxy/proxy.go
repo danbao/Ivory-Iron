@@ -1,3 +1,9 @@
+/* This program is free software. It comes without any warranty, to
+ * the extent permitted by applicable law. You can redistribute it
+ * and/or modify it under the terms of the Do What The Fuck You Want
+ * To Public License, Version 2, as published by Sam Hocevar. See
+ * http://sam.zoy.org/wtfpl/COPYING for more details. */
+ 
 package proxy
 
 import (
@@ -33,25 +39,63 @@ func init() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	var body string
-	var ContentType string
-
-// Allowed methods
-	if(r.Method != "POST" && r.Method != "GET" ) {
-			fmt.Fprintf(w, "%s", "Not allowed")
-return
+	/* var body string
+	var ContentType string*/
+	// Allowed methods
+	if r.Method != "POST" && r.Method != "GET" {
+		fmt.Fprintf(w, "%s", "Not allowed")
+		return
 	}
-
+	/*  TODO: This is the caching part etc, before we implement it, we should have already a "good" base
 	// get the Page
 	body, ContentType = getData(w, r)
 
+	// TODO: cache control
+	c := appengine.NewContext(r)
+	client := urlfetch.Client(c)
+	resp, err := client.Get("http://owncloud.org/" + r.URL.Path)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		//return 
+	}
+	defer resp.Body.Close()
+	CacheControl := resp.Header.Get("Cache-Control")
+
 	w.Header().Set("Content-Type", ContentType)
-	fmt.Fprintf(w, "%s", body)
+	w.Header().Set("Cache-Control", CacheControl)
+	fmt.Fprintf(w, "%s", body) */
+	c := appengine.NewContext(r)
+	client := urlfetch.Client(c)
+	resp, err := client.Get("http://heise.de/" + r.URL.Path)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		//return 
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	// Do the replacement
+	replaceStrings := strings.NewReplacer("heise.de", r.Host)
+	strBody := replaceStrings.Replace(string(body))
+
+	copyHeader(w.Header(), resp.Header)
+	fmt.Fprintf(w, "%s", strBody)
+}
+
+// Copy the HTTP Headers
+func copyHeader(dst, src http.Header) {
+	for k, vv := range src {
+		for _, v := range vv {
+			dst.Add(k, v)
+		}
+	}
 }
 
 // Get the data
 func getData(w http.ResponseWriter, r *http.Request) (string, string) {
 	c := appengine.NewContext(r)
+
 	// Lets first have a look in the memcache, maybe it's cached
 	if item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
 		item_Contenttype, _ := memcache.Get(c, "II_file"+r.URL.Path+"ContentType") // todo error checking
