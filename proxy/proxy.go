@@ -41,11 +41,7 @@ func init() {
 func handler(w http.ResponseWriter, r *http.Request) {
 	/* var body string
 	var ContentType string*/
-	// Allowed methods
-	if r.Method != "POST" && r.Method != "GET" {
-		fmt.Fprintf(w, "%s", "Not allowed")
-		return
-	}
+
 	/*  TODO: This is the caching part etc, before we implement it, we should have already a "good" base
 	// get the Page
 	body, ContentType = getData(w, r)
@@ -65,28 +61,36 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ContentType)
 	w.Header().Set("Cache-Control", CacheControl)
 	fmt.Fprintf(w, "%s", body) */
-	
-	if r.Header.Get("If-Modified-Since") == "" {
-		c := appengine.NewContext(r)
-		client := urlfetch.Client(c)
-		resp, err := client.Get("http://heise.de/" + r.URL.Path)
 
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			//return 
-		}
-		defer resp.Body.Close()
-		body, _ := ioutil.ReadAll(resp.Body)
-		// Do the replacement
-		replaceStrings := strings.NewReplacer("heise.de", r.Host)
+	// Allowed methods are POST and GET
+	if r.Method != "POST" && r.Method != "GET" {
+		fmt.Fprintf(w, "%s", "Not allowed")
+		return
+	}
+
+	c := appengine.NewContext(r)
+	client := urlfetch.Client(c)
+
+	r.ParseForm() // Parse the form
+	req, err := http.NewRequest(r.Method, "http://localhost/"+r.URL.Path +"?"+r.URL.RawQuery, strings.NewReader(r.Form.Encode()))
+
+	resp, _ := client.Do(req)
+	defer resp.Body.Close()
+	/*if r.Header.Get("If-Modified-Since") == "" {*/
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.Infof("Requested URL: %v does not exist", r.URL)
+	}
+
+	copyHeader(w.Header(), resp.Header) // Copy the HTTP header to the answer
+	body, _ := ioutil.ReadAll(resp.Body)
+	replaceStrings := strings.NewReplacer("http://www.google.com/", r.Host)
 		strBody := replaceStrings.Replace(string(body))
 
-		copyHeader(w.Header(), resp.Header)
-		fmt.Fprintf(w, "%s", strBody)
-	} else {
-		w.WriteHeader(http.StatusNotModified)
-		fmt.Fprintf(w, "")
-	}
+	fmt.Fprintf(w, "%s", strBody)
+
+
 }
 
 // Copy the HTTP Headers
