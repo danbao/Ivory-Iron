@@ -39,6 +39,15 @@ func init() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	// Load the host and check if we need to redirect to the admin panel
+	host := getTarget(w, r)
+	if host == "" {
+		w.Header().Set("Location", "_IIadmin/")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		fmt.Fprintf(w, "")
+		return
+	}
+
 	/* var body string
 	var ContentType string*/
 
@@ -72,7 +81,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	client := urlfetch.Client(c)
 
 	r.ParseForm() // Parse the form
-	host := getTarget(w, r)
 	req, err := http.NewRequest(r.Method, host+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
 
 	resp, _ := client.Do(req)
@@ -200,14 +208,8 @@ func getTarget(w http.ResponseWriter, r *http.Request) string {
 		Key:   "Settings",
 		Value: []byte(settings.Host),
 	}
+	memcache.Add(c, item)
 
-	// Add the item to the memcache, if the key does not already exist
-	if err := memcache.Add(c, item); err == memcache.ErrNotStored {
-		//c.Log("item with key %q already exists", item.Key)
-
-	} else if err != nil {
-		//c.Log("error adding item: %v", err)
-	}
 	return settings.Host
 }
 
