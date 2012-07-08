@@ -72,7 +72,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	client := urlfetch.Client(c)
 
 	r.ParseForm() // Parse the form
-	req, err := http.NewRequest(r.Method, "http://www.google.com/"+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
+	host := getTarget(w, r)
+	req, err := http.NewRequest(r.Method, host+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
 
 	resp, _ := client.Do(req)
 	defer resp.Body.Close()
@@ -85,7 +86,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		copyHeader(w.Header(), resp.Header) // Copy the HTTP header to the answer
 		body, _ := ioutil.ReadAll(resp.Body)
-		replaceStrings := strings.NewReplacer("http://www.google.com/", r.Host)
+		replaceStrings := strings.NewReplacer(host, r.Host)
 		strBody := replaceStrings.Replace(string(body))
 
 		fmt.Fprintf(w, "%s", strBody)
@@ -182,15 +183,68 @@ func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
 	return strBody, string(resp.Header.Get("Content-Type"))
 }
 
+// Returns the target host
+func getTarget(w http.ResponseWriter, r *http.Request) string {
+
+	c := appengine.NewContext(r)
+	// Have  a look in the memcache
+	if item, err := memcache.Get(c, "Settings"); err == nil {
+		return string(item.Value)
+	}
+	// Have a look in the database
+	key := datastore.NewKey(c, "Settings", "Settings", 0, nil)
+	var settings Settings
+	datastore.Get(c, key, &settings)
+	// And now add it to the memcache
+	item := &memcache.Item{
+		Key:   "Settings",
+		Value: []byte(settings.Host),
+	}
+
+	// Add the item to the memcache, if the key does not already exist
+	if err := memcache.Add(c, item); err == memcache.ErrNotStored {
+		//c.Log("item with key %q already exists", item.Key)
+
+	} else if err != nil {
+		//c.Log("error adding item: %v", err)
+	}
+	return settings.Host
+}
+
 func writeConfig(w http.ResponseWriter, r *http.Request) {
 	// Parse the post data and update the settings
 	if csrf.ValidateCSRFToken(r, r.FormValue("CSRFToken")) {
 		host := r.FormValue("host")
-		fmt.Fprintf(w, host)
+
+		c := appengine.NewContext(r)
+		// Save in DB
+		Settings := Settings{
+			Host: host,
+		}
+		_, err := datastore.Put(c, datastore.NewKey(c, "Settings", "Settings", 0, nil), &Settings)
+		if err != nil {
+			// Todo: Error!
+			//return "", ""
+		}
+		// Save in memcache
+		// TODO: Check if data > 1MB
+		// Create an Item
+		item := &memcache.Item{
+			Key:   "Settings",
+			Value: []byte(host),
+		}
+
+		// Add the item to the memcache, if the key does not already exist
+		if err := memcache.Add(c, item); err == memcache.ErrNotStored {
+			//c.Log("item with key %q already exists", item.Key)
+
+		} else if err != nil {
+			//c.Log("error adding item: %v", err)
+		}
+		w.Header().Set("Location", r.Host+"/_IIadmin")
+		w.WriteHeader(http.StatusFound)
+		return
 	}
-	w.Header().Set("Location", r.Host+"/_IIadmin")
-	w.WriteHeader(http.StatusFound)
-	return
 }
 func admin(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
@@ -217,6 +271,7 @@ func admin(w http.ResponseWriter, r *http.Request) {
 		// Read it out
 		x["csrfToken"] = csrf.GetToken(r)
 	}
+	x["Host"] = getTarget(w, r)
 
 	// Enhance security
 	w.Header().Set("X-Frame-Options", "DENY")           // Deny frames
