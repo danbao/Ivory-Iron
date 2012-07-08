@@ -11,3 +11,8 @@ handlers:
 - url: /.*
   script: _go_app
 
+admin_console:
+  pages:
+  - name: Settings
+    url: /_IIadmin/
+
