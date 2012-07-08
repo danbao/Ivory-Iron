@@ -1,15 +1,15 @@
-{{> header}}
-		<form class="form-horizontal" method="POST" action="/_IIadmin/writeConfig">
-        <fieldset>
-          <legend>Host settings</legend>
-          <div class="control-group">
-            <label class="control-label" for="host">Target Host</label>
-            <div class="controls">
-              <input type="text" class="input-xlarge" name="host" id="host">
-              <p class="help-block">Example: domain.tld</p>
-            </div>
-          </div> 
-          <legend>Cache settings</legend>
+          {{> header}}
+          <form class="form-horizontal" method="POST" action="/_IIadmin/writeConfig">
+            <fieldset>
+              <legend>Host settings</legend>
+              <div class="control-group">
+                <label class="control-label" for="host">Target Host</label>
+                <div class="controls">
+                  <input type="text" class="input-xlarge" name="host" id="host" value="{{{Host}}}">
+                  <p class="help-block">Example: domain.tld</p>
+                </div>
+              </div> 
+         <!-- <legend>Cache settings</legend>
           <div class="control-group">
             <label class="control-label" for="filetypes">Filetypes to cache</label>
             <div class="controls">
@@ -23,7 +23,7 @@
               <input type="text" class="input-xlarge" name="duration" id="duration">
               <p class="help-block">Example: 24</p>
             </div>
-          </div> 
+          </div>  -->
           <input type="hidden" name="CSRFToken" value="{{{csrfToken}}}">
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Seite erstellen</button>
@@ -31,4 +31,4 @@
           </div>
         </fieldset>
       </form>
-{{> footer}}
+      {{> footer}}
