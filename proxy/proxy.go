@@ -236,8 +236,7 @@ func writeConfig(w http.ResponseWriter, r *http.Request) {
 
 		// Add the item to the memcache, if the key does not already exist
 		if err := memcache.Add(c, item); err == memcache.ErrNotStored {
-			//c.Log("item with key %q already exists", item.Key)
-
+			memcache.Set(c, item) // Already exists, we need to update
 		} else if err != nil {
 			//c.Log("error adding item: %v", err)
 		}
