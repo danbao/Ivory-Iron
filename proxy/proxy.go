@@ -72,27 +72,27 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	client := urlfetch.Client(c)
 
 	r.ParseForm() // Parse the form
-	req, err := http.NewRequest(r.Method, "http://localhost/"+r.URL.Path +"?"+r.URL.RawQuery, strings.NewReader(r.Form.Encode()))
+	req, err := http.NewRequest(r.Method, "http://localhost/"+r.URL.Path+"?"+r.URL.RawQuery, strings.NewReader(r.Form.Encode()))
 
 	resp, _ := client.Do(req)
 	defer resp.Body.Close()
 	if r.Header.Get("If-Modified-Since") == "" {
 
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		c.Infof("Requested URL: %v does not exist", r.URL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.Infof("Requested URL: %v does not exist", r.URL)
+		}
+
+		copyHeader(w.Header(), resp.Header) // Copy the HTTP header to the answer
+		body, _ := ioutil.ReadAll(resp.Body)
+		replaceStrings := strings.NewReplacer("http://www.google.com/", r.Host)
+		strBody := replaceStrings.Replace(string(body))
+
+		fmt.Fprintf(w, "%s", strBody)
+	} else {
+		w.WriteHeader(http.StatusNotModified)
+		fmt.Fprintf(w, "")
 	}
-
-	copyHeader(w.Header(), resp.Header) // Copy the HTTP header to the answer
-	body, _ := ioutil.ReadAll(resp.Body)
-	replaceStrings := strings.NewReplacer("http://www.google.com/", r.Host)
-	strBody := replaceStrings.Replace(string(body))
-
-	fmt.Fprintf(w, "%s", strBody)
-} else {
-	w.WriteHeader(http.StatusNotModified)
-fmt.Fprintf(w, "")
-}
 }
 
 // Copy the HTTP Headers
