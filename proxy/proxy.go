@@ -72,7 +72,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	client := urlfetch.Client(c)
 
 	r.ParseForm() // Parse the form
-	req, err := http.NewRequest(r.Method, "http://localhost/"+r.URL.Path+"?"+r.URL.RawQuery, strings.NewReader(r.Form.Encode()))
+	req, err := http.NewRequest(r.Method, "http://www.google.com/"+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
 
 	resp, _ := client.Do(req)
 	defer resp.Body.Close()
