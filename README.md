@@ -20,7 +20,7 @@ $ python appcfg.py update ./
 This program is free software. It comes without any warranty, to the extent permitted by applicable law. You can redistribute itnand/or modify it under the terms of the Do What The Fuck You Want To Public License, Version 2, as published by Sam Hocevar. See http://sam.zoy.org/wtfpl/COPYING for more detail
 
 ### Authors and Contributors
-If you want to help: Just do it! Contact me if you want to get added to this list.
+If you want to help: Just do it!
 * Lukas Reschke (@LukasReschke)
 
 ### Support or Contact
