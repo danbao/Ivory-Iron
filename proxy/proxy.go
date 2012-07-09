@@ -108,7 +108,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		r.ParseForm() // Parse the form
 		req, err := http.NewRequest(r.Method, host+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
-		copyCookies(req,r.Cookies())// Copy the cookies to the request
+		copyCookies(req, r.Cookies()) // Copy the cookies to the request
 
 		resp, _ := client.Do(req)
 		defer resp.Body.Close()
@@ -176,7 +176,7 @@ func copyHeader(dst, src http.Header) {
 // Copy the cookies
 func copyCookies(dst *http.Request, src []*http.Cookie) {
 	for _, cookie := range src {
-			dst.AddCookie(cookie)
+		dst.AddCookie(cookie)
 	}
 }
 
