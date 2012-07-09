@@ -119,7 +119,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		copyHeader(w.Header(), resp.Header) // Copy the HTTP header to the answer
 		body, _ := ioutil.ReadAll(resp.Body)
-		replaceStrings := strings.NewReplacer(host, r.Host)
+		replaceStrings := strings.NewReplacer(host, "http://"+r.Host) // FIXME: Ugly hack
 		strBody := replaceStrings.Replace(string(body))
 
 		// Run a regex to check if we need to cache the item
