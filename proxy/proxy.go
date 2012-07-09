@@ -44,8 +44,10 @@ func init() {
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	// Load the host and check if we need to redirect to the admin panel
-	host := getTarget(w, r)
+
+	host, cacheable := getSettings(w, r)
+
+	// Check if we need to redirect to the admin panel (no host)
 	if host == "" {
 		w.Header().Set("Location", "_IIadmin/")
 		w.WriteHeader(http.StatusTemporaryRedirect)
@@ -121,7 +123,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		strBody := replaceStrings.Replace(string(body))
 
 		// Run a regex to check if we need to cache the item
-		matched, err := regexp.MatchString(getCacheable(w, r), r.URL.Path)
+		matched, err := regexp.MatchString(cacheable, r.URL.Path)
 		if err != nil {
 			// Todo: Log error
 		}
@@ -170,48 +172,37 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
-// Returns the target host
-func getTarget(w http.ResponseWriter, r *http.Request) string {
-
+// Get the settings
+func getSettings(w http.ResponseWriter, r *http.Request) (string, string) {
 	c := appengine.NewContext(r)
 	// Have  a look in the memcache
-	if item, err := memcache.Get(c, "Settings"); err == nil {
-		return string(item.Value)
+	var settings = map[string]string{}
+	item, err := memcache.Get(c, "Settings")
+	if err == nil {
+		p := bytes.NewBuffer(item.Value)
+		dec := gob.NewDecoder(p)
+		dec.Decode(&settings)
+
+		return settings["host"], settings["cacheable"]
 	}
 	// Have a look in the database
 	key := datastore.NewKey(c, "Settings", "Settings", 0, nil)
-	var settings Settings
-	datastore.Get(c, key, &settings)
+	var getSettings Settings
+	datastore.Get(c, key, &getSettings)
+
 	// And now add it to the memcache
-	item := &memcache.Item{
+	m := new(bytes.Buffer) //initialize a *bytes.Buffer
+	enc := gob.NewEncoder(m)
+	settings["host"] = getSettings.Host
+	settings["cacheable"] = getSettings.Cacheable
+	enc.Encode(settings)
+	item = &memcache.Item{
 		Key:   "Settings",
-		Value: []byte(settings.Host),
+		Value: []byte(getSettings.Host),
 	}
 	memcache.Add(c, item)
 
-	return settings.Host
-}
-
-// Returns the target host
-func getCacheable(w http.ResponseWriter, r *http.Request) string {
-
-	c := appengine.NewContext(r)
-	// Have  a look in the memcache
-	if item, err := memcache.Get(c, "Cacheable"); err == nil {
-		return string(item.Value)
-	}
-	// Have a look in the database
-	key := datastore.NewKey(c, "Cacheable", "Cacheable", 0, nil)
-	var settings Settings
-	datastore.Get(c, key, &settings)
-	// And now add it to the memcache
-	item := &memcache.Item{
-		Key:   "Cacheable",
-		Value: []byte(settings.Cacheable),
-	}
-	memcache.Add(c, item)
-
-	return settings.Cacheable
+	return getSettings.Host, getSettings.Cacheable
 }
 
 func writeConfig(w http.ResponseWriter, r *http.Request) {
@@ -231,32 +222,27 @@ func writeConfig(w http.ResponseWriter, r *http.Request) {
 			// Todo: Error!
 			//return "", ""
 		}
-		// Save in memcache
+
 		// TODO: Check if data > 1MB
-		// Create an Item
+		// Save in memcache
+		var settings = map[string]string{}
+		settings["host"] = host
+		settings["cacheable"] = cacheable
+
+		m := new(bytes.Buffer) //initialize a *bytes.Buffer
+		enc := gob.NewEncoder(m)
+		enc.Encode(settings)
+
 		item := &memcache.Item{
 			Key:   "Settings",
-			Value: []byte(host),
+			Value: m.Bytes(),
 		}
 
 		// Add the item to the memcache, if the key does not already exist
 		if err := memcache.Add(c, item); err == memcache.ErrNotStored {
 			memcache.Set(c, item) // Already exists, we need to update
-		} else if err != nil {
-			//c.Log("error adding item: %v", err)
 		}
 
-		item = &memcache.Item{
-			Key:   "Cacheable",
-			Value: []byte(cacheable),
-		}
-
-		// Add the item to the memcache, if the key does not already exist
-		if err := memcache.Add(c, item); err == memcache.ErrNotStored {
-			memcache.Set(c, item) // Already exists, we need to update
-		} else if err != nil {
-			//c.Log("error adding item: %v", err)
-		}
 		w.Header().Set("Location", r.Host+"/_IIadmin")
 		w.WriteHeader(http.StatusFound)
 		return
@@ -284,8 +270,9 @@ func admin(w http.ResponseWriter, r *http.Request) {
 		csrf.GenerateCSRFToken(r)
 	}
 	x["csrfToken"] = csrf.GetToken(r)
-	x["Host"] = getTarget(w, r)
-	x["Cacheable"] = getCacheable(w, r)
+	host, cacheable := getSettings(w, r)
+	x["Host"] = host
+	x["Cacheable"] = cacheable
 
 	// Enhance security
 	w.Header().Set("X-Frame-Options", "DENY")           // Deny frames
