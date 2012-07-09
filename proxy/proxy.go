@@ -248,6 +248,7 @@ func writeConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
 func admin(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	u := user.Current(c)
