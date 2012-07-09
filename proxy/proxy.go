@@ -215,7 +215,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) (string, string) {
 
 func writeConfig(w http.ResponseWriter, r *http.Request) {
 	// Parse the post data and update the settings
-	if csrf.ValidateCSRFToken(r, r.FormValue("CSRFToken")) {
+	if csrf.ValidateToken(r, r.FormValue("CSRFToken")) {
 		host := r.FormValue("host")
 		cacheable := r.FormValue("filetypes")
 
@@ -273,10 +273,6 @@ func admin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", url)
 		w.WriteHeader(http.StatusFound)
 		return
-	}
-	// CSRF
-	if csrf.CheckForCSRFToken(r) == false {
-		csrf.GenerateCSRFToken(r)
 	}
 	x["csrfToken"] = csrf.GetToken(r)
 	host, cacheable := getSettings(w, r)
