@@ -108,6 +108,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		r.ParseForm() // Parse the form
 		req, err := http.NewRequest(r.Method, host+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
+		copyCookies(req,r.Cookies())// Copy the cookies to the request
 
 		resp, _ := client.Do(req)
 		defer resp.Body.Close()
@@ -119,7 +120,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		copyHeader(w.Header(), resp.Header) // Copy the HTTP header to the answer
 		body, _ := ioutil.ReadAll(resp.Body)
-		replaceStrings := strings.NewReplacer(host, r.URL.Scheme + "://" + r.Host) 
+		replaceStrings := strings.NewReplacer(host, r.URL.Scheme+"://"+r.Host)
 		strBody := replaceStrings.Replace(string(body))
 
 		// Run a regex to check if we need to cache the item
@@ -169,6 +170,13 @@ func copyHeader(dst, src http.Header) {
 		for _, v := range vv {
 			dst.Add(k, v)
 		}
+	}
+}
+
+// Copy the cookies
+func copyCookies(dst *http.Request, src []*http.Cookie) {
+	for _, cookie := range src {
+			dst.AddCookie(cookie)
 	}
 }
 
