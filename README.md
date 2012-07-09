@@ -14,7 +14,7 @@ $ cd Ivory-Iron
 $ python appcfg.py update ./
 ```
 
-* Visit the admin panel (http://APPID.appspot.com/_IIadmin/) and setup Ivory-Iron.
+* Visit the admin panel (http://APPID.appspot.com/_IIadmin/) and setup Ivory-Iron. (Just copy and paste the examples ;-))
 
 ### Authors and Contributors
 If you want to help: Just do it!
