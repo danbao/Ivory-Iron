@@ -25,7 +25,8 @@ import (
 
 /* Server settings */
 type Settings struct {
-	Host string
+	Host      string
+	Cacheable string
 }
 
 /* Cache */
@@ -72,14 +73,31 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Check the datastore
-	// No? - Maybe it's in the datastore?
-	/*key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
-	var Cache Cache
-	if err := datastore.Get(c, key, &Cache); err == nil {
-		// TODO: add to memcache
-		// In the memcache, now put it also to the cache
-		//return string(Cache.Body), Cache.ContentType
-	}*/
+	key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
+	var readCache Cache
+	if err := datastore.Get(c, key, &readCache); err == nil {
+		// Add to memcache
+		var header http.Header
+		// And now save it to the memcache
+		item := &memcache.Item{
+			Key:   "II_header" + r.URL.Path,
+			Value: readCache.Headers,
+		}
+		memcache.Add(c, item)
+		item_body := &memcache.Item{
+			Key:   "II_body" + r.URL.Path,
+			Value: readCache.Body,
+		}
+		memcache.Add(c, item_body)
+
+		p := bytes.NewBuffer(readCache.Headers)
+		// Decode the entity
+		dec := gob.NewDecoder(p)
+		dec.Decode(&header)
+		copyHeader(w.Header(), header) // Copy the HTTP header to the answer
+		fmt.Fprintf(w, "%s", readCache.Body)
+		return
+	}
 
 	// Check if client sends a If-Modified-Since Header
 	if r.Header.Get("If-Modified-Since") == "" {
@@ -103,7 +121,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		strBody := replaceStrings.Replace(string(body))
 
 		// Run a regex to check if we need to cache the item
-		matched, err := regexp.MatchString(`.*\.(jpg|jpeg|gif|png|ico|tif|bmp)$`, r.URL.Path)
+		matched, err := regexp.MatchString(getCacheable(w, r), r.URL.Path)
 		if err != nil {
 			// Todo: Log error
 		}
@@ -174,15 +192,39 @@ func getTarget(w http.ResponseWriter, r *http.Request) string {
 	return settings.Host
 }
 
+// Returns the target host
+func getCacheable(w http.ResponseWriter, r *http.Request) string {
+
+	c := appengine.NewContext(r)
+	// Have  a look in the memcache
+	if item, err := memcache.Get(c, "Cacheable"); err == nil {
+		return string(item.Value)
+	}
+	// Have a look in the database
+	key := datastore.NewKey(c, "Cacheable", "Cacheable", 0, nil)
+	var settings Settings
+	datastore.Get(c, key, &settings)
+	// And now add it to the memcache
+	item := &memcache.Item{
+		Key:   "Cacheable",
+		Value: []byte(settings.Cacheable),
+	}
+	memcache.Add(c, item)
+
+	return settings.Cacheable
+}
+
 func writeConfig(w http.ResponseWriter, r *http.Request) {
 	// Parse the post data and update the settings
 	if csrf.ValidateCSRFToken(r, r.FormValue("CSRFToken")) {
 		host := r.FormValue("host")
+		cacheable := r.FormValue("filetypes")
 
 		c := appengine.NewContext(r)
 		// Save in DB
 		Settings := Settings{
-			Host: host,
+			Host:      host,
+			Cacheable: cacheable,
 		}
 		_, err := datastore.Put(c, datastore.NewKey(c, "Settings", "Settings", 0, nil), &Settings)
 		if err != nil {
@@ -195,6 +237,18 @@ func writeConfig(w http.ResponseWriter, r *http.Request) {
 		item := &memcache.Item{
 			Key:   "Settings",
 			Value: []byte(host),
+		}
+
+		// Add the item to the memcache, if the key does not already exist
+		if err := memcache.Add(c, item); err == memcache.ErrNotStored {
+			memcache.Set(c, item) // Already exists, we need to update
+		} else if err != nil {
+			//c.Log("error adding item: %v", err)
+		}
+
+		item = &memcache.Item{
+			Key:   "Cacheable",
+			Value: []byte(cacheable),
 		}
 
 		// Add the item to the memcache, if the key does not already exist
@@ -227,11 +281,11 @@ func admin(w http.ResponseWriter, r *http.Request) {
 	}
 	// CSRF
 	if csrf.CheckForCSRFToken(r) == false {
-		// Generate one 
 		csrf.GenerateCSRFToken(r)
-	} 
+	}
 	x["csrfToken"] = csrf.GetToken(r)
 	x["Host"] = getTarget(w, r)
+	x["Cacheable"] = getCacheable(w, r)
 
 	// Enhance security
 	w.Header().Set("X-Frame-Options", "DENY")           // Deny frames
