@@ -3,6 +3,9 @@ Ivory-Iron is a lightweigth, easy to setup reverse proxy for Google App Engine w
 
 ### Features
 * Caching of pages (Memcache + Datastore)
+                             
+#### Not yet implemented
+* Support for Cookies
 
 ### Setup
 * Register a Google App Engine account (https://appengine.google.com/)
@@ -17,7 +20,6 @@ $ python appcfg.py update ./
 * Visit the admin panel (http://APPID.appspot.com/_IIadmin/) and setup Ivory-Iron. (Just copy and paste the examples ;-))
 
 ### Authors and Contributors
-If you want to help: Just do it!
 * Lukas Reschke (@LukasReschke)
 
 ### Support or Contact
