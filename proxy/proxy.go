@@ -63,39 +63,36 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	// Check if the item is cached
 	// Check the memcache
-	if item, err := memcache.Get(c, "II_body"+r.URL.Path); err == nil {
-		var header http.Header
-		headerMemcache, _ := memcache.Get(c, "II_header"+r.URL.Path) // todo error checking
-		p := bytes.NewBuffer(headerMemcache.Value)
-		// Decode the entity
+	if item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
+		// Decode the map
+		var mapCache = map[string][]byte{}
+		p := bytes.NewBuffer(item.Value)
 		dec := gob.NewDecoder(p)
-		dec.Decode(&header)
-		copyHeader(w.Header(), header) // Copy the HTTP header to the answer
-		fmt.Fprintf(w, "%s", item.Value)
+		dec.Decode(&mapCache)
+
+		// Decode the headers
+		var header http.Header
+		pHeader := bytes.NewBuffer(mapCache["header"])
+		decHeader := gob.NewDecoder(pHeader)
+		decHeader.Decode(&header)
+
+		copyHeader(w.Header(), header)
+		fmt.Fprintf(w, "%s", mapCache["body"])
 		return
 	}
 	// Check the datastore
 	key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
 	var readCache Cache
 	if err := datastore.Get(c, key, &readCache); err == nil {
-		// Add to memcache
+		// Decode the header
 		var header http.Header
-		// And now save it to the memcache
-		item := &memcache.Item{
-			Key:   "II_header" + r.URL.Path,
-			Value: readCache.Headers,
-		}
-		memcache.Add(c, item)
-		item_body := &memcache.Item{
-			Key:   "II_body" + r.URL.Path,
-			Value: readCache.Body,
-		}
-		memcache.Add(c, item_body)
-
 		p := bytes.NewBuffer(readCache.Headers)
-		// Decode the entity
 		dec := gob.NewDecoder(p)
 		dec.Decode(&header)
+
+		// Add to memcache
+		saveToMemcache(r, header, string(readCache.Body))
+
 		copyHeader(w.Header(), header) // Copy the HTTP header to the answer
 		fmt.Fprintf(w, "%s", readCache.Body)
 		return
@@ -129,39 +126,54 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			// Todo: Log error
 		}
 		if matched {
-			// It should get cached
-			// Gob encode the Headers
-			m := new(bytes.Buffer) //initialize a *bytes.Buffer
-			enc := gob.NewEncoder(m)
-			enc.Encode(resp.Header)
-
-			// Save to datastore
-			Cache := Cache{
-				Body:    []byte(strBody),
-				Headers: m.Bytes(),
-			}
-			_, err = datastore.Put(c, datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil), &Cache)
-			if err != nil {
-				// Todo: Error!
-			}
-
-			// And now save it to the memcache
-			item := &memcache.Item{
-				Key:   "II_header" + r.URL.Path,
-				Value: m.Bytes(),
-			}
-			memcache.Add(c, item)
-			item_body := &memcache.Item{
-				Key:   "II_body" + r.URL.Path,
-				Value: []byte(strBody),
-			}
-			memcache.Add(c, item_body)
+			saveToDatastore(r, resp.Header, strBody)
+			saveToMemcache(r, resp.Header, strBody)
 		}
 		fmt.Fprintf(w, "%s", strBody)
 	} else {
 		w.WriteHeader(http.StatusNotModified)
 		fmt.Fprintf(w, "")
 	}
+}
+
+// Save the data to the memcache
+func saveToMemcache(r *http.Request, header http.Header, strBody string) {
+	c := appengine.NewContext(r)
+
+	mHeader := new(bytes.Buffer) //initialize a *bytes.Buffer
+	encHeader := gob.NewEncoder(mHeader)
+	encHeader.Encode(header)
+
+	var mapItem = map[string][]byte{}
+	mapItem["header"] = mHeader.Bytes()
+	mapItem["body"] = []byte(strBody)
+
+	mFile := new(bytes.Buffer) //initialize a *bytes.Buffer
+	encFile := gob.NewEncoder(mFile)
+	encFile.Encode(mapItem)
+
+	item := &memcache.Item{
+		Key:   "II_file" + r.URL.Path,
+		Value: mFile.Bytes(),
+	}
+	memcache.Add(c, item)
+}
+
+// Save the data to the datastore
+func saveToDatastore(r *http.Request, header http.Header, strBody string) {
+	c := appengine.NewContext(r)
+
+	// Gob encode the Headers
+	m := new(bytes.Buffer) //initialize a *bytes.Buffer
+	enc := gob.NewEncoder(m)
+	enc.Encode(header)
+
+	// Save to datastore
+	Cache := Cache{
+		Body:    []byte(strBody),
+		Headers: m.Bytes(),
+	}
+	datastore.Put(c, datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil), &Cache)
 }
 
 // Copy the HTTP Headers
