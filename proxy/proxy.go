@@ -229,10 +229,8 @@ func admin(w http.ResponseWriter, r *http.Request) {
 	if csrf.CheckForCSRFToken(r) == false {
 		// Generate one 
 		csrf.GenerateCSRFToken(r)
-	} else {
-		// Read it out
-		x["csrfToken"] = csrf.GetToken(r)
-	}
+	} 
+	x["csrfToken"] = csrf.GetToken(r)
 	x["Host"] = getTarget(w, r)
 
 	// Enhance security
