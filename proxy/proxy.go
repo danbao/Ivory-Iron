@@ -12,11 +12,14 @@ import (
 	"appengine/memcache"
 	"appengine/urlfetch"
 	"appengine/user"
+	"bytes"
 	"csrf"
+	"encoding/gob"
 	"fmt"
 	"io/ioutil"
 	"mustache"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -27,8 +30,8 @@ type Settings struct {
 
 /* Cache */
 type Cache struct {
-	Body        []byte
-	ContentType string
+	Body    []byte
+	Headers []byte
 }
 
 func init() {
@@ -39,6 +42,7 @@ func init() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
 	// Load the host and check if we need to redirect to the admin panel
 	host := getTarget(w, r)
 	if host == "" {
@@ -48,44 +52,45 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/* var body string
-	var ContentType string*/
-
-	/*  TODO: This is the caching part etc, before we implement it, we should have already a "good" base
-	// get the Page
-	body, ContentType = getData(w, r)
-
-	// TODO: cache control
-	c := appengine.NewContext(r)
-	client := urlfetch.Client(c)
-	resp, err := client.Get("http://owncloud.org/" + r.URL.Path)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		//return 
-	}
-	defer resp.Body.Close()
-	CacheControl := resp.Header.Get("Cache-Control")
-
-	w.Header().Set("Content-Type", ContentType)
-	w.Header().Set("Cache-Control", CacheControl)
-	fmt.Fprintf(w, "%s", body) */
-
 	// Allowed methods are POST and GET
 	if r.Method != "POST" && r.Method != "GET" {
 		fmt.Fprintf(w, "%s", "Not allowed")
 		return
 	}
 
-	c := appengine.NewContext(r)
-	client := urlfetch.Client(c)
+	// Check if the item is cached
+	// Check the memcache
+	if item, err := memcache.Get(c, "II_body"+r.URL.Path); err == nil {
+		var header http.Header
+		headerMemcache, _ := memcache.Get(c, "II_header"+r.URL.Path) // todo error checking
+		p := bytes.NewBuffer(headerMemcache.Value)
+		// Decode the entity
+		dec := gob.NewDecoder(p)
+		dec.Decode(&header)
+		copyHeader(w.Header(), header) // Copy the HTTP header to the answer
+		fmt.Fprintf(w, "%s", item.Value)
+		return
+	}
+	// Check the datastore
+	// No? - Maybe it's in the datastore?
+	/*key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
+	var Cache Cache
+	if err := datastore.Get(c, key, &Cache); err == nil {
+		// TODO: add to memcache
+		// In the memcache, now put it also to the cache
+		//return string(Cache.Body), Cache.ContentType
+	}*/
 
-	r.ParseForm() // Parse the form
-	req, err := http.NewRequest(r.Method, host+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
-
-	resp, _ := client.Do(req)
-	defer resp.Body.Close()
+	// Check if client sends a If-Modified-Since Header
 	if r.Header.Get("If-Modified-Since") == "" {
+
+		client := urlfetch.Client(c)
+
+		r.ParseForm() // Parse the form
+		req, err := http.NewRequest(r.Method, host+r.URL.Path+"?"+r.URL.RawQuery+"#"+r.URL.Fragment, strings.NewReader(r.Form.Encode()))
+
+		resp, _ := client.Do(req)
+		defer resp.Body.Close()
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -97,6 +102,40 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		replaceStrings := strings.NewReplacer(host, r.Host)
 		strBody := replaceStrings.Replace(string(body))
 
+		// Run a regex to check if we need to cache the item
+		matched, err := regexp.MatchString(`.*\.(jpg|jpeg|gif|png|ico|tif|bmp)$`, r.URL.Path)
+		if err != nil {
+			// Todo: Log error
+		}
+		if matched {
+			// It should get cached
+			// Gob encode the Headers
+			m := new(bytes.Buffer) //initialize a *bytes.Buffer
+			enc := gob.NewEncoder(m)
+			enc.Encode(resp.Header)
+
+			// Save to datastore
+			Cache := Cache{
+				Body:    []byte(strBody),
+				Headers: m.Bytes(),
+			}
+			_, err = datastore.Put(c, datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil), &Cache)
+			if err != nil {
+				// Todo: Error!
+			}
+
+			// And now save it to the memcache
+			item := &memcache.Item{
+				Key:   "II_header" + r.URL.Path,
+				Value: m.Bytes(),
+			}
+			memcache.Add(c, item)
+			item_body := &memcache.Item{
+				Key:   "II_body" + r.URL.Path,
+				Value: []byte(strBody),
+			}
+			memcache.Add(c, item_body)
+		}
 		fmt.Fprintf(w, "%s", strBody)
 	} else {
 		w.WriteHeader(http.StatusNotModified)
@@ -111,84 +150,6 @@ func copyHeader(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
-}
-
-// Get the data
-func getData(w http.ResponseWriter, r *http.Request) (string, string) {
-	c := appengine.NewContext(r)
-
-	// Lets first have a look in the memcache, maybe it's cached
-	if item, err := memcache.Get(c, "II_file"+r.URL.Path); err == nil {
-		item_Contenttype, _ := memcache.Get(c, "II_file"+r.URL.Path+"ContentType") // todo error checking
-		return string(item.Value), string(item_Contenttype.Value)
-	}
-	// No? - Maybe it's in the datastore?
-	key := datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil)
-	var Cache Cache
-	if err := datastore.Get(c, key, &Cache); err == nil {
-		// TODO: add to memcache
-		// In the memcache, now put it also to the cache
-		return string(Cache.Body), Cache.ContentType
-	}
-
-	// Not cached, we need to get the page from the server.
-	return getPage(w, r)
-}
-
-// Get the page
-func getPage(w http.ResponseWriter, r *http.Request) (string, string) {
-	c := appengine.NewContext(r)
-	client := urlfetch.Client(c)
-	resp, err := client.Get("http://owncloud.org/" + r.URL.Path)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		//return 
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-
-	// Do the replacement
-	replaceStrings := strings.NewReplacer("owncloud.org", r.Host)
-	strBody := replaceStrings.Replace(string(body))
-
-	// Save in DB
-	Cache := Cache{
-		Body:        []byte(strBody),
-		ContentType: resp.Header.Get("Content-Type"),
-	}
-	_, err = datastore.Put(c, datastore.NewKey(c, "Cache", "II_file"+r.URL.Path, 0, nil), &Cache)
-	if err != nil {
-		// Todo: Error!
-		//return "", ""
-	}
-	// Save in memcache
-	// TODO: Check if data > 1MB
-	// Create an Item
-	item := &memcache.Item{
-		Key:   "II_file" + r.URL.Path,
-		Value: []byte(strBody),
-	}
-	item_Contenttype := &memcache.Item{
-		Key:   "II_file" + r.URL.Path + "ContentType",
-		Value: []byte(resp.Header.Get("Content-Type")),
-	}
-	// Add the item to the memcache, if the key does not already exist
-	if err := memcache.Add(c, item); err == memcache.ErrNotStored {
-		//c.Log("item with key %q already exists", item.Key)
-
-	} else if err != nil {
-		//c.Log("error adding item: %v", err)
-	}
-	// Add the item to the memcache, if the key does not already exist
-	if err := memcache.Add(c, item_Contenttype); err == memcache.ErrNotStored {
-		//c.Log("item with key %q already exists", item.Key)
-
-	} else if err != nil {
-		//c.Log("error adding item: %v", err)
-	}
-	return strBody, string(resp.Header.Get("Content-Type"))
 }
 
 // Returns the target host
@@ -277,7 +238,6 @@ func admin(w http.ResponseWriter, r *http.Request) {
 	// Enhance security
 	w.Header().Set("X-Frame-Options", "DENY")           // Deny frames
 	w.Header().Set("X-XSS-Protection", "1; mode=block") // XSS Protection
-	w.Header().Set("X-Content-Type-Options", "nosniff") // Disable sniffing
 
 	data := mustache.RenderFile("templates/admin.mustache", x)
 	fmt.Fprintf(w, data)
