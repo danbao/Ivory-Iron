@@ -1,11 +1,10 @@
-          {{> header}}
           <form class="form-horizontal" method="POST" action="/_IIadmin/writeConfig">
             <fieldset>
               <legend>Host settings</legend>
               <div class="control-group">
                 <label class="control-label" for="host">Target Host</label>
                 <div class="controls">
-                  <input type="text" class="input-xlarge" name="host" id="host" value="{{{Host}}}">
+                  <input type="text" class="input-xlarge" name="host" id="host" value="{{.Host}}">
                   <p class="help-block">Example: http://domain.tld</p>
                 </div>
               </div> 
@@ -13,7 +12,7 @@
           <div class="control-group">
             <label class="control-label" for="filetypes">Filetypes to cache</label>
             <div class="controls">
-              <input type="text" class="input-xlarge" name="filetypes" id="filetypes" value="{{{Cacheable}}}">
+              <input type="text" class="input-xlarge" name="filetypes" id="filetypes" value="{{.Cacheable}}">
               <p class="help-block">Example: .*\.(jpg|jpeg|gif|png|ico|tif|bmp)$</p>
             </div>
           </div> 
@@ -24,11 +23,10 @@
               <p class="help-block">Example: 24</p>
             </div>
           </div>  -->
-          <input type="hidden" name="CSRFToken" value="{{{csrfToken}}}">
+          <input type="hidden" name="CSRFToken" value="{{.CSRFToken}}">
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save</button>
             <button class="btn">Cancel</button>
           </div>
         </fieldset>
       </form>
-      {{> footer}}

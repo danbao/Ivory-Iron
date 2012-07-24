@@ -17,10 +17,10 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io/ioutil"
-	"mustache"
 	"net/http"
 	"regexp"
 	"strings"
+	"html/template"
 )
 
 /* Server settings */
@@ -272,9 +272,8 @@ func writeConfig(w http.ResponseWriter, r *http.Request) {
 func admin(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	u := user.Current(c)
-	var x = map[interface{}]interface{}{} // Mustache in it...
 
-	// Check if the user is logged in and has admin rights
+	// Check if the user has admin rights
 	if u == nil || user.IsAdmin(c) == false {
 		url, err := user.LoginURL(c, r.URL.String())
 		if err != nil {
@@ -286,15 +285,29 @@ func admin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusFound)
 		return
 	}
-	x["csrfToken"] = csrf.GetToken(r)
-	host, cacheable := getSettings(w, r)
-	x["Host"] = host
-	x["Cacheable"] = cacheable
 
-	// Enhance security
+	// Some security related HTTP headers
 	w.Header().Set("X-Frame-Options", "DENY")           // Deny frames
 	w.Header().Set("X-XSS-Protection", "1; mode=block") // XSS Protection
+	w.Header().Set("X-Content-Type-Options", "nosniff") // Disable sniffing
 
-	data := mustache.RenderFile("templates/admin.mustache", x)
-	fmt.Fprintf(w, data)
+	// Header
+	template.Must(template.ParseFiles("templates/header.html")).Execute(w, nil)
+
+	// Adminpanel
+	type Data struct {
+		CSRFToken string
+		Host      string
+		Cacheable string
+	}
+	host, cacheable := getSettings(w, r)
+	data := Data{
+		CSRFToken: csrf.GetToken(r),
+		Host:      host,
+		Cacheable: cacheable,
+	}
+	template.Must(template.ParseFiles("templates/admin.html")).Execute(w, data)
+
+	// Footer
+	template.Must(template.ParseFiles("templates/footer.html")).Execute(w, nil)
 }
